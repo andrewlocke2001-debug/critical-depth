@@ -10,7 +10,11 @@ Built with Phaser 3 + TypeScript + Vite. All art and sound are generated at runt
 
 ## ▶ Play it
 
-**https://andrewlocke2001-debug.github.io/critical-depth/** — desktop browser + keyboard required.
+**https://andrewlocke2001-debug.github.io/critical-depth/** — plays in any browser.
+
+- **Desktop**: keyboard (WASD + the keys below).
+- **Phone / tablet**: on-screen thumbpad + buttons appear automatically. Landscape recommended.
+
 Progress autosaves in your browser (one slot per browser).
 
 ## Run it locally
@@ -36,6 +40,10 @@ npm run dev        # http://localhost:5199
 | N | Mute |
 
 Autosaves every 15 seconds. One save slot.
+
+On **touch devices** a thumbpad (drag to move/mine) and action buttons appear:
+USE, 🔥 torch, 🛤️ track (tap to lay, hold to pull up), 🧨 bombs (opens a panel with PLACE
+buttons), 🎒 inventory, 🗺️ map. Force the layout on desktop with `?touch=1` for testing.
 
 ## How the game flows (mild spoilers)
 

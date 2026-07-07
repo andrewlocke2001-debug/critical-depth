@@ -11,6 +11,7 @@ import { generate, type World } from '../world/gen';
 import { loadSave, writeSave, freshStats, type Stats, type SaveData } from '../systems/save';
 import { sfx } from '../systems/sound';
 import { Hud } from '../ui/hud';
+import { isTouchDevice } from '../ui/touch';
 
 const DIRS: Record<string, [number, number]> = { d: [0, 1], u: [0, -1], l: [-1, 0], r: [1, 0] };
 const BOMB_ITEMS: Record<number, string> = { 1: 'dynamite', 2: 'bigBlast', 3: 'megaBomb' };
@@ -31,6 +32,7 @@ export default class GameScene extends Phaser.Scene {
   facing: [number, number] = [0, 1];
   private moving = false;
   mounted = false;
+  touchDir: 'd' | 'u' | 'l' | 'r' | null = null;
 
   inv: Inventory = {};
   storage: Inventory = {};
@@ -126,6 +128,14 @@ export default class GameScene extends Phaser.Scene {
 
     // HUD
     this.hud = new Hud(this);
+
+    // phones: zoom in so tiles stay readable on a small screen
+    if (isTouchDevice()) {
+      const small = Math.min(window.innerWidth, window.innerHeight) < 700;
+      cam.setZoom(small ? 1.6 : 1.25);
+      if (window.innerHeight > window.innerWidth)
+        this.hud.toast('Tip: landscape gives you a much wider view.');
+    }
 
     this.bindKeys();
 
@@ -338,6 +348,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private heldDir(): 'd' | 'u' | 'l' | 'r' | null {
+    if (this.touchDir) return this.touchDir;
     const kb = this.input.keyboard!;
     const k = (code: number) => kb.keys[code]?.isDown;
     const K = Phaser.Input.Keyboard.KeyCodes;
@@ -465,7 +476,7 @@ export default class GameScene extends Phaser.Scene {
 
   // ============================ ACTIONS ============================
 
-  private interact() {
+  interact() {
     const fx = this.px + this.facing[0], fy = this.py + this.facing[1];
     const [ft] = this.tileAt(fx, fy);
     if (ft === T.Workbench) { sfx.click(); this.hud.openBench('work'); return; }
@@ -530,7 +541,7 @@ export default class GameScene extends Phaser.Scene {
     this.scene.start('Win', { stats: this.stats });
   }
 
-  private placeTrack() {
+  placeTrack() {
     const fx = this.px + this.facing[0], fy = this.py + this.facing[1];
     const [ft] = this.tileAt(fx, fy);
     if ((this.inv['track'] || 0) < 1) { this.hud.toast('No track. Craft Cart Track at the Workbench (iron + stone).', 'bad'); sfx.error(); return; }
@@ -546,7 +557,7 @@ export default class GameScene extends Phaser.Scene {
     this.hud.refresh();
   }
 
-  private removeTrack() {
+  removeTrack() {
     const fx = this.px + this.facing[0], fy = this.py + this.facing[1];
     const [ft, fa] = this.tileAt(fx, fy);
     if (ft !== T.Track) { this.hud.toast('Face a track piece to pull it up (G).'); return; }
@@ -558,7 +569,7 @@ export default class GameScene extends Phaser.Scene {
     this.hud.refresh();
   }
 
-  private placeTorch() {
+  placeTorch() {
     const i = this.idx(this.px, this.py);
     const [t] = this.tileAt(this.px, this.py);
     if ((this.inv['torch'] || 0) < 1) { this.hud.toast('No torches. Craft them at the Workbench (coal + stone).', 'bad'); sfx.error(); return; }

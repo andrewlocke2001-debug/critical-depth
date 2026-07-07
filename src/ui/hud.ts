@@ -3,6 +3,7 @@ import { T, CLUSTER_FLAG, oreById } from '../data/tiles';
 import { ITEMS, ITEM, PICK_NAMES, countRaw } from '../data/items';
 import { recipesFor, type BenchKind, type Recipe } from '../data/recipes';
 import { toggleMuted } from '../systems/sound';
+import { TouchControls, isTouchDevice } from './touch';
 import type GameScene from '../scenes/GameScene';
 
 type Mode = null | 'inv' | 'map' | 'help' | 'bombs' | 'confirm' | `bench-${BenchKind}`;
@@ -45,6 +46,10 @@ export class Hud {
     this.box = this.modal.querySelector('.box')!;
     this.modal.addEventListener('mousedown', e => { if (e.target === this.modal) this.close(); });
     this.modal.classList.add('clickable');
+    if (isTouchDevice()) {
+      document.body.classList.add('touch');
+      new TouchControls(scene, this.root); // lives inside this.root — removed with it
+    }
     this.refresh();
   }
 
@@ -204,19 +209,27 @@ export class Hud {
 
   private renderBombs() {
     const s = this.scene;
-    const row = (key: string, id: string, note: string) => `
-      <div class="recipe">${this.icon(id)}
+    const row = (key: string, id: string, note: string, tier?: number) => `
+      <div class="recipe brow" ${tier ? `data-tier="${tier}"` : ''}>${this.icon(id)}
         <div class="rmain"><div class="rname">[${key}] ${ITEM[id].name} — ×${s.inv[id] || 0}</div>
         <div class="rdesc">${note}</div></div>
+        ${tier ? '<button data-place="' + tier + '"' + ((s.inv[id] || 0) < 1 ? ' disabled' : '') + '>PLACE</button>' : ''}
       </div>`;
     this.box.innerHTML = `
       <span class="closehint">ESC to close</span>
       <h2>Ordnance</h2>
-      <div class="sub">Face a wall, press the number key. 2.3s fuse — step back.</div>
-      ${row('1', 'dynamite', 'Seal I · pockets · rock ≤ tier 3 · radius 2')}
-      ${row('2', 'bigBlast', 'Seal II · deep pockets · rock ≤ tier 4 · radius 3')}
-      ${row('3', 'megaBomb', 'Seal III · Corestone · everything · radius 4')}
+      <div class="sub">Tap PLACE (or press the number key) to set a bomb on the tile you face. 2.3s fuse — step back.</div>
+      ${row('1', 'dynamite', 'Seal I · pockets · rock ≤ tier 3 · radius 2', 1)}
+      ${row('2', 'bigBlast', 'Seal II · deep pockets · rock ≤ tier 4 · radius 3', 2)}
+      ${row('3', 'megaBomb', 'Seal III · Corestone · everything · radius 4', 3)}
       ${(s.inv['nuke'] || 0) > 0 ? row('E', 'nuke', 'Only works at the Cradle, at the very bottom. You know what to do.') : ''}`;
+    this.box.querySelectorAll<HTMLButtonElement>('button[data-place]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tier = Number(btn.dataset.place);
+        this.close();
+        this.scene.placeBomb(tier);
+      });
+    });
   }
 
   private renderHelp() {
