@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CRITICAL DEPTH</title>
+  <style>
+    :root {
+      --panel-bg: rgba(12, 12, 18, 0.92);
+      --panel-border: #3a3a4c;
+      --accent: #ffb84d;
+      --good: #7dde76;
+      --bad: #ff6b6b;
+      --text: #d8d4c8;
+      --dim: #8a8578;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #060609; overflow: hidden; }
+    body { font-family: 'Consolas', 'Courier New', monospace; color: var(--text); }
+    #app { width: 100%; height: 100%; }
+    #app canvas { image-rendering: pixelated; }
+
+    #ui { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+    #ui .clickable { pointer-events: auto; }
+
+    /* Top bar */
+    #topbar {
+      position: absolute; top: 8px; left: 8px;
+      display: flex; gap: 14px; align-items: center;
+      background: var(--panel-bg); border: 1px solid var(--panel-border);
+      border-radius: 6px; padding: 7px 14px; font-size: 14px;
+      text-shadow: 0 1px 2px #000;
+    }
+    #topbar b { color: var(--accent); font-weight: normal; }
+    #topbar .warn { color: var(--bad); }
+
+    #objective {
+      position: absolute; top: 8px; right: 8px; max-width: 380px;
+      background: var(--panel-bg); border: 1px solid var(--panel-border);
+      border-radius: 6px; padding: 7px 12px; font-size: 12.5px; color: #ffd894;
+    }
+    #objective::before { content: '◆ '; color: var(--accent); }
+
+    #keysbar {
+      position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+      background: rgba(10,10,15,0.75); border: 1px solid #26262f;
+      border-radius: 6px; padding: 4px 12px; font-size: 11.5px; color: var(--dim);
+      white-space: nowrap;
+    }
+    #keysbar b { color: #bdb8a8; font-weight: normal; }
+
+    /* Toasts */
+    #toasts {
+      position: absolute; bottom: 44px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column-reverse; align-items: center; gap: 5px;
+    }
+    .toast {
+      background: var(--panel-bg); border: 1px solid var(--panel-border);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px; padding: 6px 14px; font-size: 13.5px;
+      animation: toastin 0.18s ease-out; max-width: 640px; text-align: center;
+      text-shadow: 0 1px 2px #000;
+    }
+    .toast.bad { border-left-color: var(--bad); color: #ffb3b3; }
+    .toast.good { border-left-color: var(--good); color: #c9f0c5; }
+    .toast.epic { border-left-color: #d98cff; color: #ecd3ff; font-size: 15px; }
+    @keyframes toastin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; } }
+    .toast.fadeout { transition: opacity 0.5s; opacity: 0; }
+
+    /* Modal panels */
+    #modal {
+      position: absolute; inset: 0; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.45);
+    }
+    #modal.open { display: flex; }
+    #modal .box {
+      background: var(--panel-bg); border: 1px solid var(--panel-border);
+      border-radius: 10px; padding: 18px 22px; min-width: 460px; max-width: 860px;
+      max-height: 86vh; overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    }
+    #modal h2 { color: var(--accent); font-size: 17px; letter-spacing: 2px; margin-bottom: 4px; text-transform: uppercase; }
+    #modal .sub { color: var(--dim); font-size: 12px; margin-bottom: 12px; }
+    #modal .closehint { float: right; color: var(--dim); font-size: 11px; margin-top: 3px; }
+
+    .recipe {
+      display: flex; align-items: center; gap: 12px;
+      border: 1px solid #26262f; border-radius: 6px;
+      padding: 8px 12px; margin-bottom: 7px; background: rgba(255,255,255,0.02);
+    }
+    .recipe img { width: 30px; height: 30px; image-rendering: pixelated; }
+    .recipe .rmain { flex: 1; }
+    .recipe .rname { font-size: 14px; color: #f0ead8; }
+    .recipe .rdesc { font-size: 11.5px; color: var(--dim); margin-top: 1px; }
+    .recipe .rmats { font-size: 12px; margin-top: 3px; }
+    .recipe .rmats span { margin-right: 10px; }
+    .recipe .have { color: var(--good); }
+    .recipe .miss { color: var(--bad); }
+    .recipe button {
+      font-family: inherit; font-size: 13px; padding: 6px 16px;
+      background: #2d2d3a; color: var(--text); border: 1px solid #4a4a5e;
+      border-radius: 5px; cursor: pointer;
+    }
+    .recipe button:hover:not(:disabled) { background: #3d3d50; border-color: var(--accent); }
+    .recipe button:disabled { opacity: 0.35; cursor: default; }
+
+    .invgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 26px; font-size: 13px; }
+    .invrow { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+    .invrow img { width: 22px; height: 22px; image-rendering: pixelated; }
+    .invrow .cnt { margin-left: auto; color: var(--accent); }
+    .invcols { display: flex; gap: 34px; }
+    .invcols h3 { font-size: 13px; color: #bdb8a8; border-bottom: 1px solid #33333f; margin-bottom: 6px; padding-bottom: 3px; }
+
+    #mapcanvas { border: 1px solid var(--panel-border); border-radius: 4px; display: block; margin: 0 auto; background: #000; }
+    .maplegend { font-size: 11px; color: var(--dim); text-align: center; margin-top: 8px; }
+
+    .confirmrow { display: flex; gap: 12px; justify-content: center; margin-top: 16px; }
+    .confirmrow button {
+      font-family: inherit; font-size: 14px; padding: 9px 26px; border-radius: 6px; cursor: pointer;
+      background: #2d2d3a; color: var(--text); border: 1px solid #4a4a5e;
+    }
+    .confirmrow button.danger { background: #571c1c; border-color: #a33; color: #ffd4d4; }
+    .confirmrow button:hover { filter: brightness(1.3); }
+
+    /* Menu */
+    #menu {
+      position: absolute; inset: 0; display: none; flex-direction: column;
+      align-items: center; justify-content: center; gap: 10px;
+      background: radial-gradient(ellipse at 50% 120%, #2a1608 0%, #0a0a10 55%, #05050a 100%);
+    }
+    #menu.open { display: flex; }
+    #menu h1 {
+      font-size: 54px; letter-spacing: 14px; color: var(--accent);
+      text-shadow: 0 0 24px rgba(255, 140, 30, 0.5), 0 3px 0 #4d2c00; margin-bottom: 2px;
+    }
+    #menu .tag { color: var(--dim); font-size: 14px; margin-bottom: 30px; letter-spacing: 3px; }
+    #menu button {
+      font-family: inherit; font-size: 17px; letter-spacing: 2px;
+      padding: 12px 54px; margin: 5px; min-width: 300px;
+      background: rgba(30,30,42,0.9); color: var(--text);
+      border: 1px solid #4a4a5e; border-radius: 6px; cursor: pointer;
+    }
+    #menu button:hover { border-color: var(--accent); color: var(--accent); background: rgba(45,40,30,0.9); }
+    #menu button:disabled { opacity: 0.3; cursor: default; }
+    #menu .controls {
+      margin-top: 34px; font-size: 12.5px; color: var(--dim); line-height: 1.8; text-align: center;
+    }
+    #menu .controls b { color: #bdb8a8; font-weight: normal; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="ui"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
