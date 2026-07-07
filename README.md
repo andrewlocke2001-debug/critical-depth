@@ -8,7 +8,12 @@ exactly one apocalypse. Build it. Deliver it. Win, technically.
 
 Built with Phaser 3 + TypeScript + Vite. All art and sound are generated at runtime — no assets.
 
-## Run it
+## ▶ Play it
+
+**https://andrewlocke2001-debug.github.io/critical-depth/** — desktop browser + keyboard required.
+Progress autosaves in your browser (one slot per browser).
+
+## Run it locally
 
 ```bash
 npm install
