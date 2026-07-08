@@ -25,6 +25,8 @@ export const SATCHEL_CAPS = [50, 100, 170, 260]; // tier 0..3
 export const BASE_LIGHT = 8;     // player lamp radius (tiles)
 export const LANTERN_BONUS = 3;  // extra radius with lantern
 export const TORCH_LIGHT = 6;    // placed torch radius
+export const EVERGLOW_LIGHT = 8; // everglow torch radius
+export const SHROOM_LIGHT = 5;   // wild glowshroom radius
 
 // Depth bands: rows [from, to), rock tier, ambient light
 export interface Band { name: string; from: number; to: number; rock: number; ambient: number; }

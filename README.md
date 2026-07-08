@@ -45,6 +45,20 @@ On **touch devices** a thumbpad (drag to move/mine) and action buttons appear:
 USE, 🔥 torch, 🛤️ track (tap to lay, hold to pull up), 🧨 bombs (opens a panel with PLACE
 buttons), 🎒 inventory, 🗺️ map. Force the layout on desktop with `?touch=1` for testing.
 
+## Discoveries (light spoilers)
+
+You are not the first expedition. The **Deep Delvers** — three hundred miners who went
+down before you — left things behind:
+
+- **Journal pages** (24) on bones and in ruined camps. They explain who sealed this mine,
+  who built the Cradle, and why. Press **J** to read. Find all of them and the ending knows.
+- **Ruined camps** with lootable supply crates and stretches of old rail you can ride.
+- **Glowshroom groves** — caverns that light themselves. Harvest shrooms → craft
+  teal **Everglow torches** (wider radius, never dies).
+- **Six relic vaults** — sealed rune chambers holding permanent artifacts: a brighter lamp,
+  faster boots, a ghost pick, bigger blasts, a lighter satchel, and a pendulum that senses treasure.
+- The mountain has a **heartbeat**. It gets louder the deeper you go. This is fine.
+
 ## How the game flows (mild spoilers)
 
 1. **Topsoil Galleries** — mine copper + coal, smelt bars, craft a Copper Pick.

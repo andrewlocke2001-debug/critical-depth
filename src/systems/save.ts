@@ -15,7 +15,7 @@ export interface SaveData {
   v: number;
   seed: number;
   diffs: [number, number, number][];   // [index, type, aux]
-  torches: number[];
+  torches: [number, number][];         // [tile index, torch type (1 torch, 2 everglow)]
   inv: Inventory;
   storage: Inventory;
   pos: [number, number];
@@ -24,6 +24,8 @@ export interface SaveData {
   cart: boolean;
   lantern: boolean;
   stats: Stats;
+  journal: number[];                   // collected page ids
+  relics: number[];                    // collected relic ids
 }
 
 const KEY = 'critical-depth-save';
@@ -41,7 +43,11 @@ export function loadSave(): SaveData | null {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const data = JSON.parse(raw) as SaveData;
-    if (data.v !== 1) return null;
+    if (data.v !== 1 && data.v !== 2) return null;
+    // migrate v1: torches were plain indices, no journal/relics
+    data.torches = (data.torches || []).map(t => (Array.isArray(t) ? t : [t as unknown as number, 1]));
+    data.journal = data.journal || [];
+    data.relics = data.relics || [];
     return data;
   } catch { return null; }
 }

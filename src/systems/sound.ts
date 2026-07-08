@@ -65,4 +65,10 @@ export const sfx = {
   deposit: () => { tone(400, 0.07, 'square', 0.06); setTimeout(() => tone(520, 0.07, 'square', 0.06), 60); },
   seal: () => { tone(200, 0.4, 'sawtooth', 0.12, 80); noise(0.5, 0.15, 400, 100); },
   win: () => { tone(60, 2.0, 'sine', 0.4, 30); noise(2.5, 0.35, 500, 40); },
+  heartbeat: (v: number) => { tone(46, 0.22, 'sine', 0.16 * v, 34); setTimeout(() => tone(42, 0.28, 'sine', 0.12 * v, 30), 220); },
+  page: () => { noise(0.18, 0.08, 2600, 900); setTimeout(() => noise(0.12, 0.05, 2000, 700), 90); },
+  relic: () => { tone(520, 0.16, 'triangle', 0.1); setTimeout(() => tone(660, 0.16, 'triangle', 0.1), 110); setTimeout(() => tone(880, 0.3, 'triangle', 0.12), 220); },
+  crateOpen: () => { noise(0.2, 0.12, 700, 250); tone(140, 0.15, 'triangle', 0.08, 90); },
+  squish: () => { tone(300, 0.12, 'sine', 0.09, 120); noise(0.1, 0.05, 800); },
+  rumble: () => { noise(1.6, 0.12, 220, 50); tone(38, 1.4, 'sine', 0.1, 26); },
 };

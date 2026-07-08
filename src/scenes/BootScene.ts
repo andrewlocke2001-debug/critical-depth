@@ -226,6 +226,83 @@ export default class BootScene extends Phaser.Scene {
       this.gems(g, ore.color, 9, i, true);
       return;
     }
+    if (name === 'bones') {
+      this.floorBase(g, i);
+      g.fillStyle = '#d8cdb0';
+      g.beginPath(); g.arc(11, 12, 5, 0, Math.PI * 2); g.fill();      // skull
+      g.fillStyle = '#322c26'; g.fillRect(8, 10, 2, 2.5); g.fillRect(12, 10, 2, 2.5);
+      g.fillStyle = '#c9bfa4';
+      g.fillRect(17, 18, 10, 2.5); g.fillRect(20, 14, 2.5, 10);       // crossed bones
+      g.fillRect(6, 22, 7, 2); g.fillRect(24, 8, 2, 6);
+      g.fillStyle = '#e5dbc0'; g.fillRect(16, 17, 3, 3); g.fillRect(25, 17, 3, 3);
+      return;
+    }
+    if (name === 'page') {
+      this.floorBase(g, i);
+      g.save();
+      g.translate(16, 16); g.rotate(-0.18);
+      g.fillStyle = 'rgba(255,244,200,0.25)'; g.fillRect(-9, -11, 18, 22);
+      g.fillStyle = '#efe6c8'; g.fillRect(-7, -9, 14, 18);
+      g.strokeStyle = '#8a7d5c'; g.lineWidth = 1;
+      for (let k = -5; k <= 5; k += 3) { g.beginPath(); g.moveTo(-5, k); g.lineTo(5, k); g.stroke(); }
+      g.restore();
+      return;
+    }
+    if (name === 'shroom') {
+      g.fillStyle = '#232b28'; g.fillRect(0, 0, TS, TS);
+      this.speckle(g, i + 5, '#2c3833', 6, 3);
+      const shroom = (x: number, y: number, s: number) => {
+        g.fillStyle = 'rgba(94,240,208,0.18)';
+        g.beginPath(); g.arc(x, y - s * 0.4, s * 1.6, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#9adbc8'; g.fillRect(x - s * 0.22, y, s * 0.44, s * 0.9);
+        g.fillStyle = '#5ef0d0';
+        g.beginPath(); g.ellipse(x, y, s, s * 0.7, 0, Math.PI, 0); g.fill();
+        g.fillStyle = '#c8fff0'; g.fillRect(x - s * 0.5, y - s * 0.45, 2, 2); g.fillRect(x + s * 0.2, y - s * 0.3, 2, 2);
+      };
+      shroom(10, 16, 6); shroom(23, 12, 4.5); shroom(20, 24, 4);
+      return;
+    }
+    if (name === 'runefloor') {
+      g.fillStyle = '#26282e'; g.fillRect(0, 0, TS, TS);
+      this.speckle(g, i + 9, '#1d1f24', 6, 3);
+      g.strokeStyle = 'rgba(94,220,240,0.28)'; g.lineWidth = 1.2;
+      g.beginPath(); g.arc(16, 16, 9, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.moveTo(16, 9); g.lineTo(16, 23); g.moveTo(9, 16); g.lineTo(23, 16); g.stroke();
+      g.strokeStyle = 'rgba(0,0,0,0.3)'; g.strokeRect(0.5, 0.5, TS - 1, TS - 1);
+      return;
+    }
+    if (name.startsWith('pedestal')) {
+      const full = name === 'pedestal1';
+      this.drawTile(g, 'runefloor', i);
+      g.fillStyle = '#4a4e5c'; g.fillRect(9, 20, 14, 6);
+      g.fillStyle = '#5c6172'; g.fillRect(11, 10, 10, 11);
+      g.fillStyle = '#767e92'; g.fillRect(9, 8, 14, 4);
+      if (full) {
+        const gr = g.createRadialGradient(16, 6, 1, 16, 6, 9);
+        gr.addColorStop(0, 'rgba(255,230,140,0.95)');
+        gr.addColorStop(0.5, 'rgba(255,200,80,0.4)');
+        gr.addColorStop(1, 'rgba(255,200,80,0)');
+        g.fillStyle = gr; g.beginPath(); g.arc(16, 6, 9, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#ffd84d';
+        g.beginPath(); g.moveTo(16, 2); g.lineTo(20, 6); g.lineTo(16, 10); g.lineTo(12, 6); g.closePath(); g.fill();
+      }
+      return;
+    }
+    if (name.startsWith('scrate')) {
+      const full = name === 'scrate1';
+      this.floorBase(g, i);
+      g.fillStyle = '#6d5a40'; g.fillRect(5, 8, 22, 20);
+      g.strokeStyle = '#4a3d2a'; g.lineWidth = 2; g.strokeRect(6, 9, 20, 18);
+      g.beginPath(); g.moveTo(6, 9); g.lineTo(26, 27); g.stroke();
+      if (full) {
+        g.fillStyle = '#8a7550'; g.fillRect(5, 8, 22, 4);
+        g.fillStyle = '#c9bfa4'; g.fillRect(14, 6, 4, 3); // rope knot
+      } else {
+        g.fillStyle = '#181410'; g.fillRect(8, 11, 16, 13); // opened, emptied
+        g.fillStyle = '#8a7550'; g.fillRect(3, 6, 10, 3);   // lid tossed aside
+      }
+      return;
+    }
     // fallback
     g.fillStyle = '#f0f'; g.fillRect(0, 0, TS, TS);
   }
@@ -253,12 +330,12 @@ export default class BootScene extends Phaser.Scene {
   // =============== CHARACTERS & OBJECTS ===============
   private makeChars() {
     const cv = document.createElement('canvas');
-    cv.width = 320; cv.height = 64;
+    cv.width = 384; cv.height = 64;
     const g = cv.getContext('2d')!;
     const frames: Record<string, number> = {
       'player-d': 0, 'player-u': 1, 'player-l': 2, 'player-r': 3,
       'ride': 4, 'cart': 5, 'torch0': 6, 'torch1': 7,
-      'bomb1': 8, 'bomb2': 9,
+      'bomb1': 8, 'bomb2': 9, 'etorch0': 10, 'etorch1': 11,
     };
     const drawPlayer = (ox: number, dir: string) => {
       g.save(); g.translate(ox, 0);
@@ -321,6 +398,16 @@ export default class BootScene extends Phaser.Scene {
     g.strokeStyle = '#e8d84a'; g.beginPath(); g.moveTo(16, 10); g.quadraticCurveTo(20, 4, 24, 7); g.stroke();
     g.fillStyle = 'rgba(255,255,255,0.35)'; g.beginPath(); g.arc(13, 15, 3, 0, Math.PI * 2); g.fill();
     g.restore();
+    // everglow torches — bottled shroomlight
+    for (let f = 0; f < 2; f++) {
+      g.save(); g.translate(320 + f * 32, 0);
+      g.fillStyle = '#5c6172'; g.fillRect(14, 14, 4, 14);
+      g.fillStyle = '#5ef0d0';
+      g.beginPath(); g.ellipse(16, 10, f ? 4 : 5, f ? 7 : 6, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#d8fff4';
+      g.beginPath(); g.ellipse(16, 11, f ? 2 : 3, f ? 4 : 3, 0, 0, Math.PI * 2); g.fill();
+      g.restore();
+    }
 
     const tex = this.textures.addCanvas('chars', cv);
     if (tex) {
@@ -448,6 +535,54 @@ export default class BootScene extends Phaser.Scene {
       g.fillStyle = '#ffd84d'; g.fillRect(7, 7, 10, 11);
       g.fillStyle = '#fff3b0'; g.fillRect(10, 9, 4, 6);
       g.fillStyle = '#57575f'; g.fillRect(8, 18, 8, 3);
+    });
+    icons['glowshroom'] = mk(g => {
+      g.fillStyle = 'rgba(94,240,208,0.25)'; g.beginPath(); g.arc(12, 9, 9, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#9adbc8'; g.fillRect(10, 11, 4, 9);
+      g.fillStyle = '#5ef0d0'; g.beginPath(); g.ellipse(12, 11, 8, 5.5, 0, Math.PI, 0); g.fill();
+      g.fillStyle = '#c8fff0'; g.fillRect(8, 7, 2, 2); g.fillRect(14, 8, 2, 2);
+    });
+    icons['everglow'] = mk(g => {
+      g.fillStyle = '#5c6172'; g.fillRect(10, 10, 3, 11);
+      g.fillStyle = '#5ef0d0'; g.beginPath(); g.ellipse(11.5, 7, 4, 5, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#d8fff4'; g.beginPath(); g.ellipse(11.5, 8, 2, 3, 0, 0, Math.PI * 2); g.fill();
+    });
+    icons['relic1'] = mk(g => { // ember heart
+      g.fillStyle = '#ff8a4d';
+      g.beginPath(); g.moveTo(12, 21);
+      g.bezierCurveTo(2, 13, 5, 4, 12, 9); g.bezierCurveTo(19, 4, 22, 13, 12, 21);
+      g.fill();
+      g.fillStyle = '#ffd8a0'; g.fillRect(9, 9, 3, 3);
+    });
+    icons['relic2'] = mk(g => { // boots
+      g.fillStyle = '#b08a5a'; g.fillRect(8, 3, 7, 12); g.fillRect(8, 13, 12, 6);
+      g.fillStyle = '#7d5f3a'; g.fillRect(8, 17, 12, 2); g.fillRect(8, 3, 7, 2);
+    });
+    icons['relic3'] = mk(g => { // pendulum
+      g.strokeStyle = '#d9c46a'; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(12, 2); g.quadraticCurveTo(15, 8, 12, 12); g.stroke();
+      g.fillStyle = '#d9c46a';
+      g.beginPath(); g.moveTo(12, 12); g.lineTo(17, 17); g.lineTo(12, 22); g.lineTo(7, 17); g.closePath(); g.fill();
+      g.fillStyle = '#fff3b0'; g.fillRect(11, 15, 2, 2);
+    });
+    icons['relic4'] = mk(g => { // feather
+      g.fillStyle = '#a8e0ff';
+      g.beginPath(); g.moveTo(19, 3); g.quadraticCurveTo(6, 8, 5, 21); g.quadraticCurveTo(16, 18, 19, 3); g.fill();
+      g.strokeStyle = '#6ab0d8'; g.beginPath(); g.moveTo(18, 4); g.lineTo(6, 20); g.stroke();
+    });
+    icons['relic5'] = mk(g => { // ghost pick
+      g.globalAlpha = 0.75;
+      g.strokeStyle = '#c9f0e8'; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(6, 20); g.lineTo(16, 8); g.stroke();
+      g.lineWidth = 3.5;
+      g.beginPath(); g.moveTo(8, 4); g.quadraticCurveTo(17, 3, 21, 11); g.stroke();
+      g.globalAlpha = 1;
+    });
+    icons['relic6'] = mk(g => { // demolition manual
+      g.fillStyle = '#a33c3c'; g.fillRect(5, 4, 14, 17);
+      g.fillStyle = '#7d2c2c'; g.fillRect(5, 4, 3, 17);
+      g.fillStyle = '#efe6c8'; g.fillRect(10, 8, 7, 2); g.fillRect(10, 12, 7, 2);
+      g.fillStyle = '#e8d84a'; g.fillRect(12, 16, 4, 3);
     });
 
     this.registry.set('icons', icons);

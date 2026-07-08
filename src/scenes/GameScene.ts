@@ -2,10 +2,11 @@ import Phaser from 'phaser';
 import {
   TILE, MAP_W, MAP_H, SURFACE_H, PACE, MINE_TIME, CLUSTER_MINE_TIME, PICK_SPEED_BONUS,
   WALK_MS, CART_MS, SATCHEL_CAPS, BASE_LIGHT, LANTERN_BONUS, TORCH_LIGHT,
-  BOMB_STATS, bandAt, depthMeters,
+  EVERGLOW_LIGHT, SHROOM_LIGHT, BOMB_STATS, bandAt, depthMeters,
 } from '../config';
 import { T, F, CLUSTER_FLAG, ORES, oreById, frameFor, WALKABLE, TRANSPARENT } from '../data/tiles';
 import { ITEM, PICK_NAMES, countRaw, type Inventory } from '../data/items';
+import { PAGES, relicById, DEEP_WHISPERS } from '../data/lore';
 import type { Recipe } from '../data/recipes';
 import { generate, type World } from '../world/gen';
 import { loadSave, writeSave, freshStats, type Stats, type SaveData } from '../systems/save';
@@ -19,7 +20,9 @@ const BOMB_ITEMS: Record<number, string> = { 1: 'dynamite', 2: 'bigBlast', 3: 'm
 export default class GameScene extends Phaser.Scene {
   world!: World;
   diffs = new Map<number, [number, number]>();
-  torchSet = new Set<number>();
+  torchSet = new Map<number, number>();   // tile index -> 1 torch | 2 everglow
+  journal = new Set<number>();
+  relics = new Set<number>();
 
   private map!: Phaser.Tilemaps.Tilemap;
   private layer!: Phaser.Tilemaps.TilemapLayer;
@@ -68,15 +71,19 @@ export default class GameScene extends Phaser.Scene {
     const seed = save ? save.seed : ((Math.random() * 1e9) | 0) || 1;
 
     this.diffs = new Map();
-    this.torchSet = new Set();
+    this.torchSet = new Map();
     this.torchSprites = new Map();
     this.armedBombs = new Set();
+    this.journal = new Set();
+    this.relics = new Set();
     this.mounted = false; this.moving = false; this.mineIdx = -1;
 
     this.world = generate(seed);
     if (save) {
       for (const [i, t, a] of save.diffs) { this.world.type[i] = t; this.world.aux[i] = a; this.diffs.set(i, [t, a]); }
-      this.torchSet = new Set(save.torches);
+      this.torchSet = new Map(save.torches);
+      this.journal = new Set(save.journal);
+      this.relics = new Set(save.relics);
       this.inv = save.inv; this.storage = save.storage;
       this.pick = save.pick; this.satchelTier = save.satchelTier;
       this.cart = save.cart; this.lantern = save.lantern;
@@ -108,7 +115,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     // torch sprites from save
-    for (const i of this.torchSet) this.addTorchSprite(i);
+    for (const [i, tt] of this.torchSet) this.addTorchSprite(i, tt);
 
     // cradle glow
     const c = this.world.cradle;
@@ -145,7 +152,37 @@ export default class GameScene extends Phaser.Scene {
       delay: 160, loop: true,
       callback: () => {
         tf = 1 - tf;
-        for (const s of this.torchSprites.values()) s.setFrame(`torch${tf}`);
+        for (const s of this.torchSprites.values())
+          s.setFrame(`${s.getData('everglow') ? 'etorch' : 'torch'}${tf}`);
+      },
+    });
+
+    // the mountain's heartbeat — audible from the Granite Abyss down
+    this.time.addEvent({
+      delay: 1900, loop: true,
+      callback: () => {
+        if (this.py < 250) return;
+        const v = Math.min(1, 0.25 + (this.py - 250) / 200);
+        sfx.heartbeat(v);
+      },
+    });
+    // ...and its voice
+    this.time.addEvent({
+      delay: 52000, loop: true,
+      callback: () => {
+        if (this.py < 250 || this.hud.isOpen || Math.random() > 0.45) return;
+        this.hud.toast(DEEP_WHISPERS[(Math.random() * DEEP_WHISPERS.length) | 0]);
+        sfx.rumble();
+        this.cameras.main.shake(500, 0.0012);
+      },
+    });
+    // the Dowsing Pendulum tugs toward treasure
+    this.time.addEvent({
+      delay: 24000, loop: true,
+      callback: () => {
+        if (!this.relics.has(3) || this.hud.isOpen || this.py < SURFACE_H) return;
+        const t = this.nearestTreasure(45);
+        if (t) this.hud.toast(`The pendulum tugs ${t.dir}. Something is buried there.`);
       },
     });
 
@@ -191,7 +228,7 @@ export default class GameScene extends Phaser.Scene {
   private bindKeys() {
     const kb = this.input.keyboard!;
     const on = (key: string, fn: () => void) => kb.on(`keydown-${key}`, () => {
-      if (this.hud.isOpen && !['ESC', 'I', 'M', 'H', 'B'].includes(key)) return;
+      if (this.hud.isOpen && !['ESC', 'I', 'M', 'H', 'B', 'J'].includes(key)) return;
       fn();
     });
     on('E', () => this.interact());
@@ -205,10 +242,43 @@ export default class GameScene extends Phaser.Scene {
     on('M', () => this.hud.toggle('map'));
     on('H', () => this.hud.toggle('help'));
     on('B', () => this.hud.toggle('bombs'));
+    on('J', () => this.hud.toggle('journal'));
     on('N', () => this.hud.toggleMute());
     on('ESC', () => this.hud.close());
     // movement keys are polled in update()
     kb.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT');
+  }
+
+  // ============================ RELIC EFFECTS ============================
+
+  satchelCap(): number { return SATCHEL_CAPS[this.satchelTier] + (this.relics.has(4) ? 60 : 0); }
+  lightRadius(): number { return BASE_LIGHT + (this.lantern ? LANTERN_BONUS : 0) + (this.relics.has(1) ? 2 : 0); }
+  walkMs(): number { return this.relics.has(2) ? WALK_MS * 0.85 : WALK_MS; }
+  mineFactor(): number { return this.relics.has(5) ? 0.75 : 1; }
+  bombRadius(tier: number): number { return BOMB_STATS[tier].radius + (this.relics.has(6) ? 1 : 0); }
+
+  // nearest sealed pocket or untouched pedestal — for the Dowsing Pendulum
+  nearestTreasure(range: number): { x: number; y: number; d: number; dir: string } | null {
+    let best: { x: number; y: number; d: number } | null = null;
+    for (let dy = -range; dy <= range; dy++) {
+      const y = this.py + dy;
+      if (y < 0 || y >= MAP_H) continue;
+      for (let dx = -range; dx <= range; dx++) {
+        const x = this.px + dx;
+        if (x < 0 || x >= MAP_W) continue;
+        const i = this.idx(x, y);
+        const t = this.world.type[i];
+        if (t !== T.Pocket && !(t === T.Pedestal && this.world.aux[i] > 0)) continue;
+        const d = Math.abs(dx) + Math.abs(dy);
+        if (!best || d < best.d) best = { x, y, d };
+      }
+    }
+    if (!best) return null;
+    const dx = best.x - this.px, dy = best.y - this.py;
+    const vert = dy > 2 ? 'down' : dy < -2 ? 'up' : '';
+    const horiz = dx > 2 ? 'east' : dx < -2 ? 'west' : '';
+    const dir = vert && horiz ? `${vert} and ${horiz}` : vert ? `straight ${vert}` : horiz ? `due ${horiz}` : 'right beneath your boots';
+    return { ...best, dir };
   }
 
   // ============================ WORLD ACCESS ============================
@@ -253,7 +323,7 @@ export default class GameScene extends Phaser.Scene {
 
   relight() {
     this.strength.fill(0);
-    const R = BASE_LIGHT + (this.lantern ? LANTERN_BONUS : 0);
+    const R = this.lightRadius();
     const queue: number[] = [];
     const push = (x: number, y: number, s: number) => {
       if (!this.inb(x, y)) return;
@@ -263,10 +333,15 @@ export default class GameScene extends Phaser.Scene {
       queue.push((i << 5) | s);
     };
     push(this.px, this.py, R);
-    for (const ti of this.torchSet) {
+    for (const [ti, tt] of this.torchSet) {
       const tx = ti % MAP_W, ty = (ti / MAP_W) | 0;
-      if (Math.abs(tx - this.px) < 40 && Math.abs(ty - this.py) < 32) push(tx, ty, TORCH_LIGHT);
+      if (Math.abs(tx - this.px) < 40 && Math.abs(ty - this.py) < 32)
+        push(tx, ty, tt === 2 ? EVERGLOW_LIGHT : TORCH_LIGHT);
     }
+    // wild glowshrooms shine on their own
+    for (let y = Math.max(0, this.py - 32); y <= Math.min(MAP_H - 1, this.py + 32); y++)
+      for (let x = Math.max(0, this.px - 40); x <= Math.min(MAP_W - 1, this.px + 40); x++)
+        if (this.world.type[this.idx(x, y)] === T.Glowshroom) push(x, y, SHROOM_LIGHT);
     while (queue.length) {
       const packed = queue.pop()!;
       const i = packed >> 5, s = packed & 31;
@@ -334,7 +409,7 @@ export default class GameScene extends Phaser.Scene {
     if (this.mounted) {
       this.stopMining();
       if (t === T.Track) this.stepTo(tx, ty, CART_MS);
-      else if (WALKABLE.has(t)) { this.dismount(); this.stepTo(tx, ty, WALK_MS); }
+      else if (WALKABLE.has(t)) { this.dismount(); this.stepTo(tx, ty, this.walkMs()); }
       else if (Date.now() - this.lastHintAt > 1600) {
         this.lastHintAt = Date.now();
         this.hud.toast('The cart rattles to a halt. Hop off (E) to mine.');
@@ -342,7 +417,7 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
-    if (WALKABLE.has(t)) { this.stopMining(); this.stepTo(tx, ty, WALK_MS); return; }
+    if (WALKABLE.has(t)) { this.stopMining(); this.stepTo(tx, ty, this.walkMs()); return; }
 
     this.tryMine(tx, ty, delta);
   }
@@ -374,6 +449,9 @@ export default class GameScene extends Phaser.Scene {
           this.lastBand = band;
           this.hud.toast(`— ${band} —`, 'epic');
         }
+        // walked onto a journal page?
+        const [st, sa] = this.tileAt(x, y);
+        if (st === T.Page) this.collectPage(x, y, sa);
         this.relight();
         this.hud.refresh();
       },
@@ -386,16 +464,17 @@ export default class GameScene extends Phaser.Scene {
     const [t, a] = this.tileAt(x, y);
     if (t === T.Rock) {
       if (this.pick < a) return { ok: false, reason: `Tier-${a} rock. Your ${PICK_NAMES[this.pick]} can't cut it — upgrade or blast it.` };
-      const time = MINE_TIME[a] * PACE * Math.pow(PICK_SPEED_BONUS, this.pick - a);
+      const time = MINE_TIME[a] * PACE * this.mineFactor() * Math.pow(PICK_SPEED_BONUS, this.pick - a);
       return { ok: true, time };
     }
     if (t === T.Ore) {
       if (this.satchelFull()) return { ok: false, reason: 'Satchel full! Deposit at the camp Crate (or ride the rails home).' };
-      if (a & CLUSTER_FLAG) return { ok: true, time: CLUSTER_MINE_TIME * PACE };
+      if (a & CLUSTER_FLAG) return { ok: true, time: CLUSTER_MINE_TIME * PACE * this.mineFactor() };
       const ore = oreById(a & 31);
       if (this.pick < ore.tier) return { ok: false, reason: `${ore.name} sits in tier-${ore.tier} rock — you need a better pick.` };
-      return { ok: true, time: MINE_TIME[ore.tier] * 1.15 * PACE * Math.pow(PICK_SPEED_BONUS, this.pick - ore.tier) };
+      return { ok: true, time: MINE_TIME[ore.tier] * 1.15 * PACE * this.mineFactor() * Math.pow(PICK_SPEED_BONUS, this.pick - ore.tier) };
     }
+    if (t === T.Glowshroom) return { ok: true, time: 0.35 * PACE };
     if (t === T.Seal) return { ok: false, reason: `SEAL ${'I'.repeat(a)} — the old miners closed this. Only a tier-${a} bomb [key ${a}] opens it.` };
     if (t === T.Pocket) return { ok: false, reason: 'Cracked, glittering rock — a treasure pocket! Blast it open with any bomb.' };
     if (t === T.Corestone) return { ok: false, reason: 'Corestone. No pick made by man will ever scratch it. A Mega Bomb [3] might.' };
@@ -444,6 +523,14 @@ export default class GameScene extends Phaser.Scene {
       const ore = oreById(a & 31);
       this.addItem(ore.item, (a & CLUSTER_FLAG) ? 3 : 1);
       if (Math.random() < 0.2) this.addItem('stone', 1);
+    } else if (t === T.Glowshroom) {
+      this.addItem('glowshroom', 1);
+      this.setTile(x, y, T.Floor);
+      this.stats.mined++;
+      sfx.squish();
+      this.relight();
+      this.hud.refresh();
+      return;
     }
     this.setTile(x, y, T.Floor);
     this.stats.mined++;
@@ -452,7 +539,7 @@ export default class GameScene extends Phaser.Scene {
     this.hud.refresh();
   }
 
-  satchelFull(): boolean { return countRaw(this.inv) >= SATCHEL_CAPS[this.satchelTier]; }
+  satchelFull(): boolean { return countRaw(this.inv) >= this.satchelCap(); }
 
   addItem(id: string, n: number, announce = true) {
     this.inv[id] = (this.inv[id] || 0) + n;
@@ -484,6 +571,9 @@ export default class GameScene extends Phaser.Scene {
     if (ft === T.BlastBench) { sfx.click(); this.hud.openBench('blast'); return; }
     if (ft === T.Crate) { this.deposit(); return; }
     if (ft === T.Cradle) { this.useCradle(); return; }
+    if (ft === T.SupplyCrate) { this.lootCrate(fx, fy); return; }
+    if (ft === T.Pedestal) { this.takeRelic(fx, fy); return; }
+    if (ft === T.Bones) { this.hud.toast('One of the Deep Delvers. The bones are old, tidy, and unbothered. You leave them be.'); return; }
 
     // mount / dismount
     const [st] = this.tileAt(this.px, this.py);
@@ -538,7 +628,67 @@ export default class GameScene extends Phaser.Scene {
   startWin() {
     this.doSave();
     this.hud.destroy();
-    this.scene.start('Win', { stats: this.stats });
+    this.scene.start('Win', {
+      stats: this.stats,
+      pages: this.journal.size,
+      pageTotal: this.world.pageCount,
+      relicCount: this.relics.size,
+    });
+  }
+
+  // ============================ DISCOVERIES ============================
+
+  private collectPage(x: number, y: number, pageId: number) {
+    this.setTile(x, y, this.py < SURFACE_H ? T.Camp : T.Floor);
+    if (pageId >= 1 && pageId <= PAGES.length && !this.journal.has(pageId)) {
+      this.journal.add(pageId);
+      const p = PAGES[pageId - 1];
+      this.hud.toast(`Journal recovered — “${p.title}” (${this.journal.size}/${this.world.pageCount}). Press J to read.`, 'epic');
+    } else {
+      this.hud.toast('A journal page, pulped beyond reading.');
+    }
+    sfx.page();
+    this.doSave();
+    this.hud.refresh();
+  }
+
+  private lootCrate(x: number, y: number) {
+    const [, a] = this.tileAt(x, y);
+    if (a !== 1) { this.hud.toast('Empty. Someone got here first. It was you.'); return; }
+    const band = bandAt(y).rock;
+    const roll = (n: number) => 1 + Math.floor(Math.random() * n);
+    const loot: Record<string, number> = { torch: 2 + roll(4), stone: 2 + roll(5) };
+    if (Math.random() < 0.6) loot['track'] = 1 + roll(4);
+    if (Math.random() < 0.6) loot['coal'] = 2 + roll(4);
+    if (band >= 2 && Math.random() < 0.5) loot['gunpowder'] = roll(3);
+    if (band >= 3 && Math.random() < 0.4) loot['dynamite'] = roll(2);
+    if (band >= 4 && Math.random() < 0.25) loot['bigBlast'] = 1;
+    if (Math.random() < 0.15) loot['glowshroom'] = 1;
+    const parts: string[] = [];
+    for (const [id, n] of Object.entries(loot)) {
+      this.inv[id] = (this.inv[id] || 0) + n;
+      if (ITEM[id]?.raw) this.stats.oreCollected += n;
+      parts.push(`${n} ${ITEM[id]?.name ?? id}`);
+    }
+    this.setTile(x, y, T.SupplyCrate, 0);
+    this.hud.toast(`Old expedition supplies: ${parts.join(', ')}. The Delvers won't mind.`, 'good');
+    sfx.crateOpen();
+    this.doSave();
+    this.hud.refresh();
+  }
+
+  private takeRelic(x: number, y: number) {
+    const [, a] = this.tileAt(x, y);
+    if (a === 0) { this.hud.toast('The pedestal is empty. It still hums, faintly, like a picked-clean instrument.'); return; }
+    const relic = relicById(a);
+    this.relics.add(a);
+    this.setTile(x, y, T.Pedestal, 0);
+    this.hud.toast(`RELIC — ${relic.name}: ${relic.desc}`, 'epic');
+    this.hud.toast(`“${relic.flavor}”`);
+    sfx.relic();
+    if (a === 1) this.relight(); // Ember Heart
+    this.doSave();
+    this.hud.refresh();
   }
 
   placeTrack() {
@@ -572,24 +722,28 @@ export default class GameScene extends Phaser.Scene {
   placeTorch() {
     const i = this.idx(this.px, this.py);
     const [t] = this.tileAt(this.px, this.py);
-    if ((this.inv['torch'] || 0) < 1) { this.hud.toast('No torches. Craft them at the Workbench (coal + stone).', 'bad'); sfx.error(); return; }
-    if (t !== T.Floor && t !== T.Camp) { this.hud.toast('Stand on open floor to plant a torch.'); return; }
+    const type = (this.inv['torch'] || 0) > 0 ? 1 : (this.inv['everglow'] || 0) > 0 ? 2 : 0;
+    if (type === 0) { this.hud.toast('No torches. Craft them at the Workbench (coal + stone).', 'bad'); sfx.error(); return; }
+    if (t !== T.Floor && t !== T.Camp && t !== T.RuneFloor) { this.hud.toast('Stand on open floor to plant a torch.'); return; }
     if (this.torchSet.has(i)) { this.hud.toast('There is already a torch here.'); return; }
-    this.inv['torch']--;
-    this.torchSet.add(i);
-    this.addTorchSprite(i);
+    this.inv[type === 2 ? 'everglow' : 'torch']--;
+    this.torchSet.set(i, type);
+    this.addTorchSprite(i, type);
     this.stats.torchesPlaced++;
     sfx.torch();
     this.relight();
     this.hud.refresh();
   }
 
-  private addTorchSprite(i: number) {
+  private addTorchSprite(i: number, type: number) {
     const x = i % MAP_W, y = (i / MAP_W) | 0;
-    const s = this.add.sprite(x * TILE + 16, y * TILE + 12, 'chars', 'torch0').setDepth(6);
+    const everglow = type === 2;
+    const s = this.add.sprite(x * TILE + 16, y * TILE + 12, 'chars', everglow ? 'etorch0' : 'torch0').setDepth(6);
     const glow = this.add.image(x * TILE + 16, y * TILE + 10, 'glow')
-      .setTint(0xffb050).setAlpha(0.35).setScale(1.3).setDepth(5).setBlendMode(Phaser.BlendModes.ADD);
+      .setTint(everglow ? 0x66ffe0 : 0xffb050).setAlpha(everglow ? 0.4 : 0.35)
+      .setScale(everglow ? 1.7 : 1.3).setDepth(5).setBlendMode(Phaser.BlendModes.ADD);
     s.setData('glow', glow);
+    s.setData('everglow', everglow);
     this.torchSprites.set(i, s);
   }
 
@@ -628,7 +782,8 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private explode(cx: number, cy: number, tier: number) {
-    const { radius, maxRock } = BOMB_STATS[tier];
+    const { maxRock } = BOMB_STATS[tier];
+    const radius = this.bombRadius(tier);
     this.stats.bombs++;
     const yields: Record<string, number> = {};
     let sealBroken = 0;
@@ -644,6 +799,11 @@ export default class GameScene extends Phaser.Scene {
         if (t === T.Corestone && tier >= 3) { this.setTile(x, y, T.Floor); continue; }
         if (t === T.Rock && a <= maxRock) {
           if (Math.random() < 0.25) yields['stone'] = (yields['stone'] || 0) + 1;
+          this.setTile(x, y, T.Floor);
+          continue;
+        }
+        if (t === T.Glowshroom) {
+          yields['glowshroom'] = (yields['glowshroom'] || 0) + 1;
           this.setTile(x, y, T.Floor);
           continue;
         }
@@ -753,10 +913,10 @@ export default class GameScene extends Phaser.Scene {
 
   doSave() {
     const data: SaveData = {
-      v: 1,
+      v: 2,
       seed: this.world.seed,
       diffs: [...this.diffs.entries()].map(([i, [t, a]]) => [i, t, a] as [number, number, number]),
-      torches: [...this.torchSet],
+      torches: [...this.torchSet.entries()],
       inv: this.inv,
       storage: this.storage,
       pos: [this.px, this.py],
@@ -765,6 +925,8 @@ export default class GameScene extends Phaser.Scene {
       cart: this.cart,
       lantern: this.lantern,
       stats: this.stats,
+      journal: [...this.journal],
+      relics: [...this.relics],
     };
     writeSave(data);
   }

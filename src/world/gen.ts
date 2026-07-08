@@ -1,5 +1,6 @@
 import { MAP_W, MAP_H, SURFACE_H, BANDS, SEAL_ROWS, SEAL_THICK, CHASM_BELTS, bandAt } from '../config';
 import { T, ORE, CLUSTER_FLAG } from '../data/tiles';
+import { PAGES } from '../data/lore';
 
 export interface World {
   seed: number;
@@ -10,6 +11,7 @@ export interface World {
   spawn: { x: number; y: number };
   cradle: { x: number; y: number };
   benches: { work: [number, number]; furnace: [number, number]; blast: [number, number]; crate: [number, number] };
+  pageCount: number;
 }
 
 // mulberry32 seeded RNG
@@ -242,6 +244,139 @@ export function generate(seed: number): World {
     }
   }
 
+  // ---- 9.5 discoveries: ruins, glowshroom groves, relic vaults, journal pages ----
+  const pagesPlaced: [number, number][] = [];
+  const carveRect = (x0: number, y0: number, rw: number, rh: number): boolean => {
+    for (let y = y0; y < y0 + rh; y++)
+      for (let x = x0; x < x0 + rw; x++) {
+        if (!inb(x, y) || x < 3 || x >= w - 3 || y < SURFACE_H + 2 || y > 494) return false;
+        if (forbiddenRow(y)) return false;
+        const t = type[idx(x, y)];
+        if (t === T.Bedrock || t === T.Camp || t === T.Cradle || t === T.Corestone) return false;
+      }
+    for (let y = y0; y < y0 + rh; y++)
+      for (let x = x0; x < x0 + rw; x++) set(x, y, T.Floor);
+    return true;
+  };
+
+  // abandoned camps of the Deep Delvers — bones, supplies, a page, sometimes old rails
+  let ruinsBuilt = 0;
+  for (let attempt = 0; attempt < 400 && ruinsBuilt < 14; attempt++) {
+    const targetY = 16 + Math.floor((ruinsBuilt / 14) * 470) + Math.floor(r() * 24);
+    const cx = 8 + Math.floor(r() * (w - 20));
+    const rw2 = 5 + Math.floor(r() * 3), rh2 = 3 + Math.floor(r() * 2);
+    if (!carveRect(cx, targetY, rw2, rh2)) continue;
+    const cell = (dx: number, dy: number): [number, number] => [cx + dx, targetY + dy];
+    set(...cell(0, 0), T.SupplyCrate, 1);
+    set(...cell(rw2 - 1, rh2 - 1), T.Bones);
+    if (r() < 0.5) set(...cell(rw2 - 1, 0), T.Bones);
+    const [px2, py2] = cell(1 + Math.floor(r() * (rw2 - 2)), 1 + Math.floor(r() * Math.max(1, rh2 - 2)));
+    set(px2, py2, T.Page);
+    pagesPlaced.push([px2, py2]);
+    if (r() < 0.55) { // a stretch of the old rail line, still serviceable
+      const len = 3 + Math.floor(r() * 4);
+      for (let i = 0; i < len; i++) {
+        const tx = cx + rw2 + i, ty = targetY + 1;
+        if (!inb(tx, ty) || forbiddenRow(ty)) break;
+        const t = type[idx(tx, ty)];
+        if (t === T.Bedrock || t === T.Camp || t === T.Seal || t === T.Corestone || t === T.Cradle) break;
+        set(tx, ty, T.Track, t === T.Chasm ? 1 : 0);
+      }
+    }
+    ruinsBuilt++;
+  }
+
+  // lone remains with a page
+  let bonesPlaced = 0;
+  for (let attempt = 0; attempt < 300 && bonesPlaced < 8; attempt++) {
+    const cy = 30 + Math.floor((bonesPlaced / 8) * 450) + Math.floor(r() * 30);
+    const cx = 8 + Math.floor(r() * (w - 16));
+    if (!carveRect(cx, cy, 2, 2)) continue;
+    set(cx, cy, T.Bones);
+    set(cx + 1, cy, T.Page);
+    pagesPlaced.push([cx + 1, cy]);
+    bonesPlaced++;
+  }
+
+  // glowshroom groves — the mine's own light
+  let groves = 0;
+  for (let attempt = 0; attempt < 300 && groves < 8; attempt++) {
+    const cy = 90 + Math.floor((groves / 8) * 390) + Math.floor(r() * 30);
+    const cx = 10 + Math.floor(r() * (w - 20));
+    const rx = 3 + Math.floor(r() * 4), ry = 2 + Math.floor(r() * 3);
+    if (forbiddenRow(cy - ry - 1) || forbiddenRow(cy + ry + 1) || forbiddenRow(cy)) continue;
+    if (bandAt(cy).rock >= 6 || cy > 490) continue;
+    let carved = 0;
+    for (let dy = -ry; dy <= ry; dy++)
+      for (let dx = -rx; dx <= rx; dx++)
+        if ((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) <= 1) {
+          const tx = cx + dx, ty = cy + dy;
+          if (!inb(tx, ty) || tx < 3 || tx >= w - 3 || forbiddenRow(ty)) continue;
+          const t = type[idx(tx, ty)];
+          if (t === T.Bedrock || t === T.Camp || t === T.Seal || t === T.Corestone || t === T.Cradle) continue;
+          set(tx, ty, T.Floor);
+          carved++;
+        }
+    if (carved < 12) continue;
+    let shrooms = 0;
+    for (let dy = -ry; dy <= ry; dy++)
+      for (let dx = -rx; dx <= rx; dx++) {
+        const tx = cx + dx, ty = cy + dy;
+        if (!inb(tx, ty) || type[idx(tx, ty)] !== T.Floor) continue;
+        const edge = (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry);
+        if (edge > 0.35 && r() < 0.4) { set(tx, ty, T.Glowshroom); shrooms++; }
+      }
+    if (shrooms < 3) { set(cx - rx + 1, cy, T.Glowshroom); set(cx + rx - 1, cy, T.Glowshroom); }
+    groves++;
+  }
+
+  // relic vaults — sealed rune chambers of the old ones
+  const vaultDepths = [55, 125, 210, 320, 400, 465];
+  for (let v = 0; v < 6; v++) {
+    let placed = false;
+    for (let attempt = 0; attempt < 80 && !placed; attempt++) {
+      const cy = vaultDepths[v] + Math.floor(r() * 14) - 7;
+      const cx = 12 + Math.floor(r() * (w - 24));
+      let ok = true;
+      for (let dy = -3; dy <= 3 && ok; dy++)
+        for (let dx = -3; dx <= 3 && ok; dx++) {
+          const tx = cx + dx, ty = cy + dy;
+          if (!inb(tx, ty) || tx < 3 || tx >= w - 3 || ty < SURFACE_H + 3 || forbiddenRow(ty)) ok = false;
+          else {
+            const t = type[idx(tx, ty)];
+            if (t === T.Bedrock || t === T.Camp || t === T.Seal || t === T.Corestone || t === T.Cradle) ok = false;
+          }
+        }
+      if (!ok) continue;
+      const shellTier = v < 3 ? 1 : 2;
+      for (let dy = -3; dy <= 3; dy++)
+        for (let dx = -3; dx <= 3; dx++) {
+          const tx = cx + dx, ty = cy + dy;
+          if (Math.abs(dx) === 3 || Math.abs(dy) === 3) set(tx, ty, T.Pocket, shellTier);
+          else set(tx, ty, T.RuneFloor);
+        }
+      set(cx, cy, T.Pedestal, v + 1);
+      placed = true;
+    }
+  }
+
+  // the first page waits at camp; the last waits above the Heart
+  set(57, 5, T.Page);
+  pagesPlaced.push([57, 5]);
+  set(spineEndX, 518, T.Page);
+  pagesPlaced.push([spineEndX, 518]);
+
+  // number the pages by depth so the story reads in order
+  // (later features may have overwritten a page tile — number only survivors,
+  //  spreading the story so the first and last entries always exist)
+  const validPages = pagesPlaced.filter(([px3, py3]) => type[idx(px3, py3)] === T.Page);
+  validPages.sort((a, b) => a[1] - b[1]);
+  const nPages = validPages.length;
+  validPages.forEach(([px3, py3], i) => {
+    const content = nPages <= 1 ? PAGES.length : Math.round((i * (PAGES.length - 1)) / (nPages - 1)) + 1;
+    aux[idx(px3, py3)] = content;
+  });
+
   // ---- 10. guarantee minimum uranium/voidstone (win must be possible) ----
   const countOre = (ore: number) => {
     let n = 0;
@@ -254,5 +389,5 @@ export function generate(seed: number): World {
   guard = 0;
   while (countOre(ORE.voidstone) < 30 && guard++ < 200) paintVein(veins[7]);
 
-  return { seed, w, h, type, aux, spawn: { x: 55, y: 5 }, cradle, benches };
+  return { seed, w, h, type, aux, spawn: { x: 55, y: 5 }, cradle, benches, pageCount: nPages };
 }

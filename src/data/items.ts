@@ -34,6 +34,8 @@ export const ITEMS: ItemDef[] = [
 
   { id: 'track',      name: 'Cart Track',   color: 0xa8763e, kind: 'gear', desc: 'Place with F. Bridges chasms. Ride with E.' },
   { id: 'torch',      name: 'Torch',        color: 0xffb84d, kind: 'gear', desc: 'Place with T. Lights the dark permanently.' },
+  { id: 'glowshroom', name: 'Glowshroom',   color: 0x5ef0d0, kind: 'misc', desc: 'Cold light in a stalk. Priya called them everglows.' },
+  { id: 'everglow',   name: 'Everglow Torch', color: 0x5ef0d0, kind: 'gear', desc: 'Place with T (used after normal torches). Wider, colder, eternal light.' },
 ];
 
 export const ITEM: Record<string, ItemDef> = Object.fromEntries(ITEMS.map(i => [i.id, i]));

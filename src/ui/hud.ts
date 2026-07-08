@@ -1,12 +1,13 @@
-import { SATCHEL_CAPS, bandAt, depthMeters, SURFACE_H } from '../config';
+import { bandAt, depthMeters, SURFACE_H } from '../config';
 import { T, CLUSTER_FLAG, oreById } from '../data/tiles';
 import { ITEMS, ITEM, PICK_NAMES, countRaw } from '../data/items';
 import { recipesFor, type BenchKind, type Recipe } from '../data/recipes';
+import { PAGES, RELICS } from '../data/lore';
 import { toggleMuted } from '../systems/sound';
 import { TouchControls, isTouchDevice } from './touch';
 import type GameScene from '../scenes/GameScene';
 
-type Mode = null | 'inv' | 'map' | 'help' | 'bombs' | 'confirm' | `bench-${BenchKind}`;
+type Mode = null | 'inv' | 'map' | 'help' | 'bombs' | 'journal' | 'confirm' | `bench-${BenchKind}`;
 
 const BENCH_TITLES: Record<BenchKind, [string, string]> = {
   work: ['Workbench', 'Tools, tracks, torches, upgrades.'],
@@ -36,7 +37,7 @@ export class Hud {
       <div id="topbar"></div>
       <div id="objective"></div>
       <div id="toasts"></div>
-      <div id="keysbar"><b>WASD</b> mine/move · <b>E</b> use/ride · <b>F</b> track · <b>G</b> pull track · <b>T</b> torch · <b>1/2/3</b> bomb · <b>I</b> inventory · <b>M</b> map · <b>H</b> help · <b>N</b> mute</div>
+      <div id="keysbar"><b>WASD</b> mine/move · <b>E</b> use/ride · <b>F</b> track · <b>G</b> pull track · <b>T</b> torch · <b>1/2/3</b> bomb · <b>I</b> inventory · <b>J</b> journal · <b>M</b> map · <b>H</b> help · <b>N</b> mute</div>
       <div id="modal"><div class="box clickable"></div></div>`;
     ui.appendChild(this.root);
     this.topbar = this.root.querySelector('#topbar')!;
@@ -63,7 +64,7 @@ export class Hud {
   // ---------- top bar & objective ----------
   refresh() {
     const s = this.scene;
-    const cap = SATCHEL_CAPS[s.satchelTier];
+    const cap = s.satchelCap();
     const load = countRaw(s.inv);
     const band = s.py < SURFACE_H ? 'Base Camp' : bandAt(s.py).name;
     const bombs = `🧨${s.inv['dynamite'] || 0} ● ${s.inv['bigBlast'] || 0} ◉ ${s.inv['megaBomb'] || 0}`;
@@ -72,11 +73,13 @@ export class Hud {
       `<span><b>${depthMeters(s.py)}m</b> ${band}</span>` +
       `<span class="${load >= cap ? 'warn' : ''}">⛏ ${load}/${cap}</span>` +
       `<span>${PICK_NAMES[s.pick]}</span>` +
-      `<span>🔥${s.inv['torch'] || 0} 🛤${s.inv['track'] || 0}</span>` +
-      `<span>${bombs}</span>` + nuke;
+      `<span>🔥${(s.inv['torch'] || 0) + (s.inv['everglow'] || 0)} 🛤${s.inv['track'] || 0}</span>` +
+      `<span>${bombs}</span>` +
+      `<span>📜${s.journal.size} ✦${s.relics.size}</span>` + nuke;
     this.objective.textContent = this.scene.objective();
     if (this.mode?.startsWith('bench-')) this.renderBench(this.mode.slice(6) as BenchKind);
     if (this.mode === 'inv') this.renderInventory();
+    if (this.mode === 'journal') this.renderJournal();
   }
 
   toast(msg: string, cls: '' | 'bad' | 'good' | 'epic' = '') {
@@ -114,6 +117,7 @@ export class Hud {
     else if (mode === 'map') this.renderMap();
     else if (mode === 'help') this.renderHelp();
     else if (mode === 'bombs') this.renderBombs();
+    else if (mode === 'journal') this.renderJournal();
     else if (mode?.startsWith('bench-')) this.renderBench(mode.slice(6) as BenchKind);
   }
 
@@ -191,11 +195,14 @@ export class Hud {
 
   private renderInventory() {
     const s = this.scene;
-    const cap = SATCHEL_CAPS[s.satchelTier];
+    const cap = s.satchelCap();
     const rows = (inv: Record<string, number>, raw: boolean) =>
       ITEMS.filter(it => !!it.raw === raw && (inv[it.id] || 0) > 0)
         .map(it => `<div class="invrow">${this.icon(it.id)}<span>${it.name}</span><span class="cnt">${inv[it.id]}</span></div>`)
         .join('') || '<div style="color:#666">— empty —</div>';
+    const relicRows = RELICS.filter(r => s.relics.has(r.id))
+      .map(r => `<div class="invrow">${this.icon('relic' + r.id)}<span title="${r.desc}">${r.name}</span></div>`)
+      .join('') || '<div style="color:#666">— none yet. The old ones hid them well. —</div>';
     this.box.innerHTML = `
       <span class="closehint">ESC / I to close</span>
       <h2>Inventory</h2>
@@ -204,7 +211,24 @@ export class Hud {
         <div style="flex:1"><h3>Satchel (raw)</h3>${rows(s.inv, true)}</div>
         <div style="flex:1"><h3>Goods</h3>${rows(s.inv, false)}</div>
         <div style="flex:1"><h3>Crate storage</h3>${rows(s.storage, true)}</div>
+        <div style="flex:1"><h3>Relics ✦ ${s.relics.size}/${RELICS.length}</h3>${relicRows}</div>
       </div>`;
+  }
+
+  private renderJournal() {
+    const s = this.scene;
+    const found = PAGES.map((p, i) => ({ id: i + 1, p })).filter(e => s.journal.has(e.id));
+    const entries = found.map(e => `
+      <div style="border-left: 2px solid #6a5a3a; padding: 4px 12px; margin-bottom: 12px;">
+        <div style="color:#ffd894; font-size:13px;">— ${e.p.title} —</div>
+        <div style="color:#cfc6b0; font-size:12.5px; line-height:1.65; margin-top:3px;">${e.p.text}</div>
+      </div>`).join('')
+      || '<div style="color:#666; padding: 20px 0; text-align:center;">No pages yet. The Deep Delvers left their story scattered through the mine —<br>look for bones, ruins, and old camps.</div>';
+    this.box.innerHTML = `
+      <span class="closehint">ESC / J to close</span>
+      <h2>Expedition Journal</h2>
+      <div class="sub">${s.journal.size} of ${s.world.pageCount} pages recovered. Written by the ones who sealed this place.</div>
+      ${entries}`;
   }
 
   private renderBombs() {
@@ -244,6 +268,9 @@ export class Hud {
         · <b>Seal walls</b> (glowing chevrons) only open with the right bomb tier. Face the wall, press <b>1/2/3</b>, run.<br>
         · <b>Cracked glittering rock</b> hides treasure pockets — blast them for huge ore hauls.<br>
         · Torches (<b>T</b>) are permanent light. You will want many.<br>
+        · <b style="color:#c8b890">You are not the first expedition.</b> The Deep Delvers left ruins, supply crates,
+          journal pages (<b>J</b> to read), glowing mushroom groves, and six sealed <b style="color:#ffd84d">relic vaults</b>
+          holding permanent artifacts. Explore off the beaten shaft.<br>
         · Depth bands: Topsoil → Stoneworks (iron/sulfur) → Deep (silver) → Granite (gold/crystal) → Voidreach (uranium) → <b style="color:#ff6a3c">The Core</b>.<br>
         · Endgame: enrich uranium, build <b style="color:#7dff3a">T.H.E. N.U.K.E.</b>, carry it to the Cradle at ~1030m, press E.<br>
         <br><span style="color:#8a8578">Autosaves every 15 seconds. The world, sadly for it, is persistent.</span>
@@ -288,6 +315,12 @@ export class Hud {
         case T.Seal: return ['#ff9d2e', '#ff4747', '#c44dff'][Math.min(2, a - 1)] || '#f00';
         case T.Pocket: return '#c9b458';
         case T.Track: return '#a8763e';
+        case T.Bones: return '#d8cdb0';
+        case T.Page: return '#fff2c0';
+        case T.Glowshroom: return '#5ef0d0';
+        case T.Pedestal: return a > 0 ? '#ffd84d' : '#767e92';
+        case T.RuneFloor: return '#2e4a4e';
+        case T.SupplyCrate: return '#8a7550';
         default: return '#111';
       }
     };
@@ -317,5 +350,24 @@ export class Hud {
       }
     g.fillStyle = '#ffb84d';
     g.fillRect(LX + RANGE * LS - 2, RANGE * LS - 2, 5, 5);
+
+    // the Dowsing Pendulum reveals nearby treasure — even through unexplored rock
+    if (s.relics.has(3)) {
+      const blink = (Date.now() / 500 | 0) % 2 === 0;
+      if (blink) {
+        g.fillStyle = '#ffe94d';
+        for (let dy = -RANGE; dy < RANGE; dy++)
+          for (let dx = -RANGE; dx < RANGE; dx++) {
+            const x = s.px + dx, y = s.py + dy;
+            if (x < 0 || x >= w || y < 0 || y >= h) continue;
+            const i = y * w + x;
+            const t = s.world.type[i];
+            if (t === T.Pocket || (t === T.Pedestal && s.world.aux[i] > 0)) {
+              g.fillRect(x - 1, y - 1, 3, 3);
+              g.fillRect(LX + (dx + RANGE) * LS - 1, (dy + RANGE) * LS - 1, LS + 2, LS + 2);
+            }
+          }
+      }
+    }
   }
 }

@@ -15,6 +15,12 @@ export const T = {
   Seal: 12,       // aux = seal tier 1..3 (bomb tier required)
   Pocket: 13,     // pocket shell, aux = bomb tier required (1..2)
   Track: 14,      // aux = 1 if laid over chasm
+  Bones: 15,      // the Deep Delvers, at rest (walkable)
+  Page: 16,       // journal page, aux = page number (walk over to collect)
+  Glowshroom: 17, // bioluminescent — natural light source, harvestable
+  Pedestal: 18,   // relic pedestal, aux = relic id (0 = taken)
+  RuneFloor: 19,  // carved vault floor (walkable)
+  SupplyCrate: 20,// abandoned supplies, aux = 1 until looted
 } as const;
 
 export const CLUSTER_FLAG = 32;
@@ -46,6 +52,7 @@ export const FRAMES: string[] = [
   'seal2', 'seal3', 'pocket1', 'pocket2', 'trackH', 'trackV', 'trackX',
   'ore1', 'ore2', 'ore3', 'ore4', 'ore5', 'ore6', 'ore7', 'ore8', 'ore9',
   'cl1', 'cl2', 'cl3', 'cl4', 'cl5', 'cl6', 'cl7', 'cl8', 'cl9',
+  'bones', 'page', 'shroom', 'pedestal1', 'pedestal0', 'runefloor', 'scrate1', 'scrate0',
 ];
 export const F: Record<string, number> = Object.fromEntries(FRAMES.map((n, i) => [n, i]));
 export const SHEET_COLS = 8;
@@ -71,10 +78,19 @@ export function frameFor(type: number, aux: number): number {
       return (aux & CLUSTER_FLAG) ? F.cl1 + id - 1 : F.ore1 + id - 1;
     }
     case T.Track: return F.trackH;
+    case T.Bones: return F.bones;
+    case T.Page: return F.page;
+    case T.Glowshroom: return F.shroom;
+    case T.Pedestal: return aux > 0 ? F.pedestal1 : F.pedestal0;
+    case T.RuneFloor: return F.runefloor;
+    case T.SupplyCrate: return aux > 0 ? F.scrate1 : F.scrate0;
     default: return F.bedrock;
   }
 }
 
-export const WALKABLE = new Set<number>([T.Camp, T.Floor, T.Track]);
+export const WALKABLE = new Set<number>([T.Camp, T.Floor, T.Track, T.Bones, T.Page, T.RuneFloor]);
 // tiles light can pass through
-export const TRANSPARENT = new Set<number>([T.Camp, T.Floor, T.Track, T.Chasm, T.Cradle]);
+export const TRANSPARENT = new Set<number>([
+  T.Camp, T.Floor, T.Track, T.Chasm, T.Cradle,
+  T.Bones, T.Page, T.RuneFloor, T.Glowshroom,
+]);

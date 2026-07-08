@@ -24,6 +24,7 @@ export class TouchControls {
       <div id="tbtns" class="clickable">
         <div class="trow">
           <button data-act="bag" aria-label="Inventory">🎒</button>
+          <button data-act="journal" aria-label="Journal">📖</button>
           <button data-act="map" aria-label="Map">🗺️</button>
           <button data-act="bomb" aria-label="Bombs">🧨</button>
         </div>
@@ -79,6 +80,7 @@ export class TouchControls {
             case 'torch': this.scene.placeTorch(); break;
             case 'bomb': this.scene.hud.toggle('bombs'); break;
             case 'bag': this.scene.hud.toggle('inv'); break;
+            case 'journal': this.scene.hud.toggle('journal'); break;
             case 'map': this.scene.hud.toggle('map'); break;
           }
         });

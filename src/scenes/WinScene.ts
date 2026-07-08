@@ -7,13 +7,19 @@ import { sfx } from '../systems/sound';
 // planet, watch it crack apart and detonate. Then stats + credits.
 export default class WinScene extends Phaser.Scene {
   private stats!: Stats;
+  private pages = 0;
+  private pageTotal = 0;
+  private relicCount = 0;
   private skipHint!: Phaser.GameObjects.Text;
   private stage = 0;
 
   constructor() { super('Win'); }
 
-  init(data: { stats: Stats }) {
+  init(data: { stats: Stats; pages?: number; pageTotal?: number; relicCount?: number }) {
     this.stats = data.stats;
+    this.pages = data.pages ?? 0;
+    this.pageTotal = data.pageTotal ?? 0;
+    this.relicCount = data.relicCount ?? 0;
     this.stage = 0;
   }
 
@@ -203,11 +209,14 @@ export default class WinScene extends Phaser.Scene {
     const cx = W / 2;
     const mono = 'Consolas, monospace';
 
-    this.add.text(cx, 90, 'THE WORLD IS GONE.', {
+    const allPages = this.pageTotal > 0 && this.pages >= this.pageTotal;
+    this.add.text(cx, 84, 'THE WORLD IS GONE.', {
       fontFamily: mono, fontSize: '40px', color: '#ffb84d', letterSpacing: 6,
     } as never).setOrigin(0.5);
-    this.add.text(cx, 140, 'You won. Technically.', {
-      fontFamily: mono, fontSize: '17px', color: '#8a8578',
+    this.add.text(cx, 132, allPages
+      ? 'You read every page. You knew exactly what you were finishing. Hale would have liked you.'
+      : 'You won. Technically.', {
+      fontFamily: mono, fontSize: allPages ? '14px' : '17px', color: allPages ? '#c8b890' : '#8a8578',
     }).setOrigin(0.5);
 
     const s = this.stats;
@@ -221,12 +230,14 @@ export default class WinScene extends Phaser.Scene {
       ['Track laid', String(s.tracksLaid)],
       ['Torches placed', String(s.torchesPlaced)],
       ['Items crafted', String(s.crafted)],
+      ['Journal pages', `${this.pages}/${this.pageTotal}${allPages ? ' — all of them' : ''}`],
+      ['Relics recovered', `${this.relicCount}/6`],
       ['Deepest point', `${Math.max(0, (s.deepest - 8) * 2)}m`],
       ['Worlds destroyed', '1'],
     ];
     lines.forEach(([k, v], i) => {
-      this.add.text(cx - 190, 200 + i * 28, k, { fontFamily: mono, fontSize: '15px', color: '#d8d4c8' });
-      this.add.text(cx + 190, 200 + i * 28, v, { fontFamily: mono, fontSize: '15px', color: '#ffb84d' }).setOrigin(1, 0);
+      this.add.text(cx - 190, 178 + i * 26, k, { fontFamily: mono, fontSize: '14px', color: '#d8d4c8' });
+      this.add.text(cx + 190, 178 + i * 26, v, { fontFamily: mono, fontSize: '14px', color: '#ffb84d' }).setOrigin(1, 0);
     });
 
     this.add.text(cx, H - 90, 'CRITICAL DEPTH', { fontFamily: mono, fontSize: '14px', color: '#555', letterSpacing: 4 } as never).setOrigin(0.5);

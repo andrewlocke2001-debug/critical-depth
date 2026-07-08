@@ -17,9 +17,9 @@ export default class MenuScene extends Phaser.Scene {
     const controls = isTouchDevice()
       ? `Drag the <b>pad</b> to move — push into rock to mine it.<br>
          <b>USE</b> benches, crates, carts & the Cradle &nbsp;·&nbsp; <b>🛤️</b> lay track (hold to pull up)<br>
-         <b>🔥</b> torch &nbsp;·&nbsp; <b>🧨</b> bombs &nbsp;·&nbsp; <b>🎒</b> inventory &nbsp;·&nbsp; <b>🗺️</b> map<br><br>`
+         <b>🔥</b> torch &nbsp;·&nbsp; <b>🧨</b> bombs &nbsp;·&nbsp; <b>🎒</b> inventory &nbsp;·&nbsp; <b>📖</b> journal &nbsp;·&nbsp; <b>🗺️</b> map<br><br>`
       : `<b>WASD / Arrows</b> move & mine &nbsp;·&nbsp; <b>E</b> interact / ride cart &nbsp;·&nbsp; <b>F</b> lay track &nbsp;·&nbsp; <b>G</b> remove track<br>
-         <b>T</b> torch &nbsp;·&nbsp; <b>1/2/3</b> place bomb &nbsp;·&nbsp; <b>I</b> inventory &nbsp;·&nbsp; <b>M</b> map &nbsp;·&nbsp; <b>H</b> help &nbsp;·&nbsp; <b>N</b> mute<br><br>`;
+         <b>T</b> torch &nbsp;·&nbsp; <b>1/2/3</b> place bomb &nbsp;·&nbsp; <b>I</b> inventory &nbsp;·&nbsp; <b>J</b> journal &nbsp;·&nbsp; <b>M</b> map &nbsp;·&nbsp; <b>H</b> help &nbsp;·&nbsp; <b>N</b> mute<br><br>`;
     this.el.innerHTML = `
       <h1>CRITICAL DEPTH</h1>
       <div class="tag">DIG DEEP · BLAST DEEPER · END THE WORLD</div>
